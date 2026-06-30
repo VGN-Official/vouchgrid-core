@@ -147,6 +147,9 @@
         .badge-verified { background-color: var(--verified-green); color: #0f172a; }
         .badge-pending { background-color: var(--pending-orange); color: #0f172a; }
     </style>
+
+        <script src="https://sdk.minepi.com/pi-sdk.js"></script>
+
 </head>
 <body>
 
@@ -185,6 +188,11 @@
                 <input type="text" id="validatorUsername" required placeholder="e.g., operator_02">
             </div>
             <button type="submit" class="submit-btn" id="submitBtn">Submit Attestation Vouch</button>
+
+            <button class="submit-btn" id="payBtn" onclick="triggerPiPayment()" style="background-color: #6366f1; margin-top: 10px;">
+                Run Test Pi Payment
+            </button>
+
         </form>
         <div id="vouchResponse" class="response-box"></div>
     </div>
@@ -294,6 +302,45 @@
             submitBtn.innerText = "Submit Attestation Vouch";
         }
     });
+
+        // Initialize Pi SDK
+        const Pi = window.Pi;
+        if (Pi) {
+        Pi.init({ version: "2.0", sandbox: true }); // Use sandbox true for test transactions
+    }
+ 
+    async function triggerPiPayment() {
+    try {
+        const payment = await Pi.createPayment({
+            amount: 1,
+            memo: "VouchGrid System Test Verification Node Payment",
+            metadata: { test: "initial_setup" }
+        }, {
+            onReadyForServerApproval: async (paymentId) => {
+                // Let our backend know we are ready to approve this ID
+                await fetch('/api/pi-payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'approve', paymentId })
+                });
+            },
+            onReadyForServerCompletion: async (paymentId, txid) => {
+                // Let our backend know the user signed the transaction
+                await fetch('/api/pi-payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'complete', paymentId, txid })
+                });
+                alert("Transaction fully complete!");
+            },
+            onCancel: (paymentId) => console.log("Payment canceled", paymentId),
+            onError: (error, paymentId) => console.error("Payment error", error, paymentId)
+        });
+    } catch (err) {
+        console.error("SDK Failed to load payment window:", err);
+    }
+}
+
 </script>
 
 </body>
