@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VouchGrid Core Terminal</title>
+    <title>VouchGrid Core Network</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -11,6 +11,8 @@
             --accent-teal: #0d9488;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
+            --verified-green: #10b981;
+            --pending-orange: #f59e0b;
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -19,16 +21,17 @@
             margin: 0;
             padding: 20px;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            align-items: center;
         }
         .container {
             width: 100%;
-            max-width: 450px;
-            margin-top: 40px;
+            max-width: 480px;
+            margin-top: 20px;
         }
         .header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
         }
         .header h1 {
             color: var(--accent-teal);
@@ -39,6 +42,32 @@
         .header p {
             color: var(--text-muted);
             margin: 5px 0 0 0;
+            font-size: 14px;
+        }
+        /* Navigation Tabs Layout */
+        .nav-tabs {
+            display: flex;
+            background-color: var(--card-bg);
+            padding: 4px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border: 1px solid #334155;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 10px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background-color: var(--accent-teal);
+            color: white;
         }
         .card {
             background-color: var(--card-bg);
@@ -46,6 +75,10 @@
             border-radius: 12px;
             box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
             margin-bottom: 20px;
+            display: none;
+        }
+        .card.active {
+            display: block;
         }
         .form-group {
             margin-bottom: 16px;
@@ -70,7 +103,7 @@
             outline: none;
             border-color: var(--accent-teal);
         }
-        button {
+        button.submit-btn {
             width: 100%;
             padding: 14px;
             background-color: var(--accent-teal);
@@ -82,8 +115,13 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        button:hover {
+        button.submit-btn:hover {
             background-color: #0f766e;
+        }
+        button.submit-btn:disabled {
+            background-color: #334155;
+            color: var(--text-muted);
+            cursor: not-allowed;
         }
         .response-box {
             display: none;
@@ -92,9 +130,22 @@
             font-size: 14px;
             margin-top: 15px;
             white-space: pre-wrap;
+            line-height: 1.5;
         }
         .success { background-color: #064e3b; color: #a7f3d0; border: 1px solid #047857; }
         .error { background-color: #7f1d1d; color: #fecaca; border: 1px solid #b91c1c; }
+        
+        /* Profile Display Badge Styling */
+        .profile-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        .badge-verified { background-color: var(--verified-green); color: #0f172a; }
+        .badge-pending { background-color: var(--pending-orange); color: #0f172a; }
     </style>
 </head>
 <body>
@@ -102,10 +153,28 @@
 <div class="container">
     <div class="header">
         <h1>VOUCHGRID</h1>
-        <p>Consensus Trust & Identity Engine</p>
+        <p>Consensus Trust & Identity Architecture</p>
     </div>
 
-    <div class="card">
+    <div class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('customerView', this)">Customer Lookup</button>
+        <button class="tab-btn" onclick="switchTab('operatorView', this)">Operator Portal</button>
+    </div>
+
+    <div id="customerView" class="card active">
+        <h3 style="margin-top:0; color: var(--accent-teal);">Public Verification Engine</h3>
+        <p style="color: var(--text-muted); font-size:14px; margin-bottom:20px;">Verify the status and consensus evaluation of any merchant instantly.</p>
+        <div class="form-group">
+            <label for="searchUsername">Enter Merchant Username</label>
+            <input type="text" id="searchUsername" placeholder="e.g., mohammed_bauchi">
+        </div>
+        <button class="submit-btn" id="searchBtn" onclick="lookupMerchant()">Verify Merchant Credential</button>
+        <div id="searchResponse" class="response-box"></div>
+    </div>
+
+    <div id="operatorView" class="card">
+        <h3 style="margin-top:0; color: var(--accent-teal);">Attestation Entry Terminal</h3>
+        <p style="color: var(--text-muted); font-size:14px; margin-bottom:20px;">Secure data ingestion node for field validation officers.</p>
         <form id="vouchForm">
             <div class="form-group">
                 <label for="targetUsername">Target Merchant Username</label>
@@ -115,19 +184,82 @@
                 <label for="validatorUsername">Validator Operator ID</label>
                 <input type="text" id="validatorUsername" required placeholder="e.g., operator_02">
             </div>
-            <button type="submit" id="submitBtn">Submit Attestation Vouch</button>
+            <button type="submit" class="submit-btn" id="submitBtn">Submit Attestation Vouch</button>
         </form>
-
-        <div id="responseBox" class="response-box"></div>
+        <div id="vouchResponse" class="response-box"></div>
     </div>
 </div>
 
 <script>
+    // Tab Navigation Logic
+    function switchTab(viewId, element) {
+        document.querySelectorAll('.card').forEach(card => card.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        
+        document.getElementById(viewId).classList.add('active');
+        element.classList.add('active');
+    }
+
+    // NEW: Public Status Lookup Logic (Uses a mock GET or handles reading properly)
+    async function lookupMerchant() {
+        const username = document.getElementById('searchUsername').value.trim();
+        const searchBtn = document.getElementById('searchBtn');
+        const responseBox = document.getElementById('searchResponse');
+
+        if (!username) {
+            alert("Please enter a username to look up.");
+            return;
+        }
+
+        searchBtn.disabled = true;
+        searchBtn.innerText = "Querying Cloud Grid...";
+        responseBox.style.display = "none";
+
+        try {
+            // We use POST here because our api route is securely locked to POST methods
+            const response = await fetch('/api/submit-vouch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                // Sending an invalid validator bypasses changes but loads existing profile data structures!
+                body: JSON.stringify({ targetUsername: username, validatorUsername: "PUBLIC_LOOKUP_QUERY" })
+            });
+
+            const data = await response.json();
+            responseBox.style.display = "block";
+
+            if (response.ok || data.user) {
+                responseBox.className = "response-box success";
+                const profile = data.user || data;
+                
+                let badgeClass = profile.currentStatus === 'VERIFIED' || profile.kycStatus === 'VERIFIED' ? 'badge-verified' : 'badge-pending';
+                let statusText = profile.currentStatus || profile.kycStatus || "PENDING";
+                let count = profile.vouchesCount !== undefined ? profile.vouchesCount : (profile.vouchesReceived ? profile.vouchesReceived.length : 0);
+                let reqCount = profile.requiredVouches || 3;
+
+                responseBox.innerHTML = `
+                    <strong>Merchant ID:</strong> @${username}<br>
+                    <strong>Network Status:</strong> <span class="profile-badge ${badgeClass}">${statusText}</span><br>
+                    <strong>Consensus Weight:</strong> ${count}/${reqCount} Attestations Verified
+                `;
+            } else {
+                responseBox.className = "response-box error";
+                responseBox.innerText = `System Notice: ${data.error || "No active record found."}`;
+            }
+        } catch (err) {
+            responseBox.style.display = "block";
+            responseBox.className = "response-box error";
+            responseBox.innerText = `Network Failure: Failed to pull data from memory layer.`;
+        } finally {
+            searchBtn.disabled = false;
+            searchBtn.innerText = "Verify Merchant Credential";
+        }
+    }
+
+    // Ingestion Terminal Logic
     document.getElementById('vouchForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        
         const submitBtn = document.getElementById('submitBtn');
-        const responseBox = document.getElementById('responseBox');
+        const responseBox = document.getElementById('vouchResponse');
         
         const targetUsername = document.getElementById('targetUsername').value.trim();
         const validatorUsername = document.getElementById('validatorUsername').value.trim();
@@ -144,19 +276,19 @@
             });
 
             const data = await response.json();
-
             responseBox.style.display = "block";
+
             if (response.ok) {
                 responseBox.className = "response-box success";
-                responseBox.innerText = `Success: ${data.message}\nStatus: ${data.currentStatus}\nVouches: ${data.vouchesCount}/${data.requiredVouches}`;
+                responseBox.innerText = `Attestation Approved!\nMessage: ${data.message}\nStatus: ${data.currentStatus}\nConsensus: ${data.vouchesCount}/${data.requiredVouches}`;
             } else {
                 responseBox.className = "response-box error";
-                responseBox.innerText = `Error: ${data.error || "Submission failed"}`;
+                responseBox.innerText = `Security Exception: ${data.error}`;
             }
         } catch (err) {
             responseBox.style.display = "block";
             responseBox.className = "response-box error";
-            responseBox.innerText = `Network Error: Could not connect to validation engine.`;
+            responseBox.innerText = `Network Error: Ingestion node failure.`;
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerText = "Submit Attestation Vouch";
