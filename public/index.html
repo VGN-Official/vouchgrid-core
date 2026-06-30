@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VouchGrid Core Terminal</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent-teal: #0d9488;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 450px;
+            margin-top: 40px;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: var(--accent-teal);
+            margin: 0;
+            font-size: 28px;
+            letter-spacing: 1px;
+        }
+        .header p {
+            color: var(--text-muted);
+            margin: 5px 0 0 0;
+        }
+        .card {
+            background-color: var(--card-bg);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        input {
+            width: 100%;
+            padding: 12px;
+            box-sizing: border-box;
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: white;
+            font-size: 16px;
+        }
+        input:focus {
+            outline: none;
+            border-color: var(--accent-teal);
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--accent-teal);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #0f766e;
+        }
+        .response-box {
+            display: none;
+            padding: 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-top: 15px;
+            white-space: pre-wrap;
+        }
+        .success { background-color: #064e3b; color: #a7f3d0; border: 1px solid #047857; }
+        .error { background-color: #7f1d1d; color: #fecaca; border: 1px solid #b91c1c; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>VOUCHGRID</h1>
+        <p>Consensus Trust & Identity Engine</p>
+    </div>
+
+    <div class="card">
+        <form id="vouchForm">
+            <div class="form-group">
+                <label for="targetUsername">Target Merchant Username</label>
+                <input type="text" id="targetUsername" required placeholder="e.g., mohammed_bauchi">
+            </div>
+            <div class="form-group">
+                <label for="validatorUsername">Validator Operator ID</label>
+                <input type="text" id="validatorUsername" required placeholder="e.g., operator_02">
+            </div>
+            <button type="submit" id="submitBtn">Submit Attestation Vouch</button>
+        </form>
+
+        <div id="responseBox" class="response-box"></div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('vouchForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('submitBtn');
+        const responseBox = document.getElementById('responseBox');
+        
+        const targetUsername = document.getElementById('targetUsername').value.trim();
+        const validatorUsername = document.getElementById('validatorUsername').value.trim();
+
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Processing Cloud Handshake...";
+        responseBox.style.display = "none";
+
+        try {
+            const response = await fetch('/api/submit-vouch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetUsername, validatorUsername })
+            });
+
+            const data = await response.json();
+
+            responseBox.style.display = "block";
+            if (response.ok) {
+                responseBox.className = "response-box success";
+                responseBox.innerText = `Success: ${data.message}\nStatus: ${data.currentStatus}\nVouches: ${data.vouchesCount}/${data.requiredVouches}`;
+            } else {
+                responseBox.className = "response-box error";
+                responseBox.innerText = `Error: ${data.error || "Submission failed"}`;
+            }
+        } catch (err) {
+            responseBox.style.display = "block";
+            responseBox.className = "response-box error";
+            responseBox.innerText = `Network Error: Could not connect to validation engine.`;
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerText = "Submit Attestation Vouch";
+        }
+    });
+</script>
+
+</body>
+</html>
