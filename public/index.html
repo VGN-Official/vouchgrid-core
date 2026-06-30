@@ -310,14 +310,36 @@
     }
  
     async function triggerPiPayment() {
+    const payBtn = document.getElementById('payBtn');
+    
+    // Check if the Pi object is available in the browser window
+    if (!window.Pi) {
+        alert("Pi SDK not detected. Please make sure you are running this inside the official Pi Browser.");
+        return;
+    }
+
+    payBtn.disabled = true;
+    payBtn.innerText = "Authenticating with Pi Network...";
+
     try {
-        const payment = await Pi.createPayment({
+        // 1. Authenticate the user first to obtain permissions
+        const scopes = ['username'];
+        const authResult = await window.Pi.authenticate(scopes, (onIncompletePaymentFound) => {
+            console.log("Found an incomplete payment:", onIncompletePaymentFound);
+            // Optional: Handle stuck payments here if needed
+        });
+
+        console.log("Authenticated successfully as user:", authResult.user.username);
+        payBtn.innerText = "Opening Secure Wallet...";
+
+        // 2. Fire the payment window now that we have authentication clearance
+        const payment = await window.Pi.createPayment({
             amount: 1,
             memo: "VouchGrid System Test Verification Node Payment",
             metadata: { test: "initial_setup" }
         }, {
             onReadyForServerApproval: async (paymentId) => {
-                // Let our backend know we are ready to approve this ID
+                console.log("Payment created. Requesting backend approval for ID:", paymentId);
                 await fetch('/api/pi-payment', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -325,19 +347,32 @@
                 });
             },
             onReadyForServerCompletion: async (paymentId, txid) => {
-                // Let our backend know the user signed the transaction
+                console.log("User signed transaction. Finalizing ID:", paymentId);
                 await fetch('/api/pi-payment', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'complete', paymentId, txid })
                 });
-                alert("Transaction fully complete!");
+                alert("Transaction fully complete! Check your Developer Portal.");
             },
-            onCancel: (paymentId) => console.log("Payment canceled", paymentId),
-            onError: (error, paymentId) => console.error("Payment error", error, paymentId)
+            onCancel: (paymentId) => {
+                console.log("Payment canceled by user:", paymentId);
+                payBtn.disabled = false;
+                payBtn.innerText = "Run Test Pi Payment";
+            },
+            onError: (error, paymentId) => {
+                console.error("Payment error encountered:", error, paymentId);
+                alert(`Payment Window Error: ${error.message || error}`);
+                payBtn.disabled = false;
+                payBtn.innerText = "Run Test Pi Payment";
+            }
         });
+
     } catch (err) {
-        console.error("SDK Failed to load payment window:", err);
+        console.error("Authentication or SDK processing failed:", err);
+        alert(`SDK Exception: ${err.message || err}`);
+        payBtn.disabled = false;
+        payBtn.innerText = "Run Test Pi Payment";
     }
 }
 
