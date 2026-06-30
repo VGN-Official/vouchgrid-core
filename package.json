@@ -7,7 +7,9 @@
   "scripts": {
     "start": "echo \"Ready for local development matrix\" && exit 0"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@upstash/redis": "^1.38.0"
+  },
   "engines": {
     "node": ">=18.0.0"
   }
