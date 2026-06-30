@@ -1,8 +1,7 @@
-import fs from 'fs';
-import path from 'path';
+import { Redis } from '@upstash/redis';
 
-// Helper to locate and read the central status ledger
-const statusFilePath = path.join(process.cwd(), 'status.json');
+// Initialize the Redis client using the environment variables automatically injected by Vercel
+const redis = Redis.fromEnv();
 
 export default async function handler(req, res) {
     // 1. Enforce strict CORS and Method Security
@@ -13,31 +12,28 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
 
-    try {
-        // 2. Extract incoming attestation parameters
+try {
         const { targetUsername, validatorUsername } = req.body;
 
         if (!targetUsername || !validatorUsername) {
-            return res.status(400).json({ error: "Missing targetUsername or validatorUsername parameters." });
+            return res.status(400).json({ error: "Missing required parameters." });
         }
 
         if (targetUsername === validatorUsername) {
             return res.status(400).json({ error: "Security Violation: You cannot vouch for yourself." });
         }
 
-        // 3. Read the existing state from status.json
-        if (!fs.existsSync(statusFilePath)) {
-            return res.status(500).json({ error: "System Error: status.json layer missing." });
-        }
+        // 2. Fetch the target user's profile straight from your cloud database
+        const dbKey = `user:${targetUsername}`;
+        let userProfile = await redis.get(dbKey);
         
-        const fileData = fs.readFileSync(statusFilePath, 'utf-8');
-        const db = JSON.parse(fileData);
+        // Handle variations in how the Redis client returns data structures
+        if (typeof userProfile === 'string') {
+            userProfile = JSON.parse(userProfile);
+        }
 
-        if (!db.users) db.users = {};
-
-        // 4. Initialize target user profile if they don't exist yet
-        if (!db.users[targetUsername]) {
-            db.users[targetUsername] = {
+        if (!userProfile) {
+            userProfile = {
                 username: targetUsername,
                 kycStatus: "PENDING",
                 tier: 1,
@@ -46,36 +42,30 @@ export default async function handler(req, res) {
             };
         }
 
-        const userProfile = db.users[targetUsername];
-
-        // 5. Short-circuit if user is already verified
+        // 3. Short-circuit if user is already verified
         if (userProfile.kycStatus === "VERIFIED") {
             return res.status(200).json({ 
-                message: "User identity is already fully verified and locked.", 
+                message: "Identity is already fully verified and locked.", 
                 user: userProfile 
             });
         }
 
-        // 6. FRAUD MITIGATION: Prevent duplicate vouches from the same validator
+        // 4. Fraud Mitigation: Prevent duplicate vouches from the same validator
         if (userProfile.vouchesReceived.includes(validatorUsername)) {
             return res.status(400).json({ error: "Validation Rejected: You have already vouched for this identity." });
         }
 
-        // 7. Register the new behavioral attestation signature
-        userProfile.vouchesReceived.push(validatorUsername);
-        console.log(`📡 New vouch registered for ${targetUsername} by ${validatorUsername}. Total: ${userProfile.vouchesReceived.length}`);
+        // 5. Register the new behavioral attestation vouch
+    userProfile.vouchesReceived.push(validatorUsername);
 
-        // 8. AUTOSCALING TRUST ENGINE: Evaluate consensus rules
+        // 6. Autoscaling Trust Engine: Check consensus rules
         if (userProfile.vouchesReceived.length >= userProfile.requiredVouches) {
             userProfile.kycStatus = "VERIFIED";
-            userProfile.tier = 2; // Auto-promote user access level tier
-            console.log(`🟢 Consensus reached! Identity ${targetUsername} is now officially VERIFIED.`);
+           userProfile.tier = 2; // Auto-promote user access level tier
         }
 
-        // 9. Atomic write back to status.json file matrix
-        fs.writeFileSync(statusFilePath, JSON.stringify(db, null, 2), 'utf-8');
-
-        // 10. Respond with clean, verified status telemetry
+        // 7. Atomic Save straight to upstash-kv-teal-cloud memory
+        await redis.set(dbKey, JSON.stringify(userProfile));
         return res.status(200).json({
             success: true,
             message: userProfile.kycStatus === "VERIFIED" ? "Identity fully verified via consensus!" : "Vouch recorded successfully.",
@@ -85,7 +75,7 @@ export default async function handler(req, res) {
         });
 
     } catch (error) {
-        console.error("🔴 VouchGrid Engine Failure:", error);
-        return res.status(500).json({ error: "Internal processing crash", details: error.message });
+        console.error("🔴 VouchGrid Engine Cloud KV Failure:", error);
+        return res.status(500).json({ error: "Cloud database processing crash", details: error.message });
     }
 }
