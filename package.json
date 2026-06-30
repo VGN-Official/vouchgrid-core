@@ -1,0 +1,14 @@
+{
+  "name": "vouchgrid-core",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Decentralized Behavioral Attestation & Identity Vouch Engine",
+  "main": "index.js",
+  "scripts": {
+    "start": "echo \"Ready for local development matrix\" && exit 0"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
