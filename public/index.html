@@ -702,25 +702,67 @@
     }
 
     // 7. AUTO-MOUNT INIT PIPELINE
-    async function initPiNetwork() {
-        const authText = document.getElementById('authText');
-        const authBtn = document.getElementById('authBtn');
-        try {
-            if (window.Pi) {
-                await window.Pi.init({ version: "2.0", sandbox: true });
-                window.isInitialized = true; // Set window context safely
-                await authenticatePiUser();
-            } else {
-                authText.innerText = "Pi SDK Missing";
-                authBtn.style.display = "block";
-            }
-        } catch (err) {
-            authText.innerText = "Pi Init Failed";
+async function initPiNetwork() {
+    const authText = document.getElementById('authText');
+    const authBtn = document.getElementById('authBtn');
+    
+    try {
+        if (window.Pi) {
+            // Step 1: The Engine Turns On (Initialize the SDK as a Promise)
+            await window.Pi.init({ version: "2.0", sandbox: true });
+            window.isInitialized = true; // Set window context safely
+            
+            // Step 2: The Driver Logs In (Trigger the updated authentication)
+            await authenticatePiUser();
+        } else {
+            authText.innerText = "Pi SDK Missing";
             authBtn.style.display = "block";
         }
+    } catch (err) {
+        console.error("Pi Core Initialization Error:", err);
+        authText.innerText = "Pi Init Failed";
+        authBtn.style.display = "block";
     }
+}
 
-    window.addEventListener('DOMContentLoaded', initPiNetwork);
+// Make sure your authenticatePiUser function matches the updated scopes:
+async function authenticatePiUser() {
+    const authText = document.getElementById('authText');
+    const authBtn = document.getElementById('authBtn');
+    
+    try {
+        if (authText) authText.innerText = "Authenticating Session...";
+        
+        // Request BOTH username and payments permissions to bypass the SDK scope block
+        const auth = await window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound);
+        
+        // Pass the verified token to your Vercel edge endpoint
+        const verifyRes = await fetch('/api/pi-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accessToken: auth.accessToken })
+        });
+        const verifyData = await verifyRes.json();
+
+        if (verifyRes.ok && verifyData.success) {
+            if (authText) authText.innerText = `Connected: @${verifyData.user.username}`;
+            document.getElementById('validatorUsername').value = verifyData.user.username;
+            document.getElementById('submitBtn').disabled = false;
+        } else {
+            throw new Error(verifyData.error || "Backend verification failed");
+        }
+    } catch (authError) {
+        console.error("Authentication handshake failed:", authError);
+        if (authText) authText.innerText = "Authentication Failed";
+        if (authBtn) authBtn.style.display = "block";
+    }
+}
+
+function onIncompletePaymentFound(payment) {
+    console.log("Incomplete payment trace located:", payment);
+}
+
+window.addEventListener('DOMContentLoaded', initPiNetwork);
 
 </script>
 
