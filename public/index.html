@@ -228,7 +228,7 @@
 </div>
 
 <script>
-/// --- 1. GLOBAL SYSTEM STATES ---
+// --- 1. GLOBAL SYSTEM STATES ---
 let isInitialized = false;
 let isPiEngineReady = false;
 let verifiedPiUser = null;
@@ -279,8 +279,8 @@ async function authenticatePiUser() {
     if (authButton) authButton.style.display = "none";
 
     try {
-        console.log("[VouchGrid Grid] Triggering Pi.authenticate with standard ['username'] scope...");
-        const auth = await window.Pi.authenticate(['username'], onIncompletePaymentFound);
+        console.log("[VouchGrid Grid] Triggering Pi.authenticate with expanded username and payments scopes...");
+        const auth = await window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound);
         
         console.log("[VouchGrid Grid] Front-end token received. Shipping token to backend validation node...");
         
@@ -294,8 +294,6 @@ async function authenticatePiUser() {
 
         if (verifyRes.ok && verifyData.success) {
             console.log("[VouchGrid Grid] Backend handshake validated successfully for:", verifyData.username);
-            
-            // Set session profile parameters
             verifiedPiUser = { username: verifyData.username };
             
             if (authStatusText) authStatusText.innerText = `Connected: @${verifyData.username}`;
@@ -312,18 +310,116 @@ async function authenticatePiUser() {
     }
 }
 
-// --- 5. COMPREHENSIVE U2A PAYMENT TRANSFERS (STUBBED FOR AUTH BASELINE) ---
+// --- 5. COMPREHENSIVE U2A PAYMENT TRANSFERS ---
 document.getElementById('vouchForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    alert("Authentication active. Ready for Payment integration phase.");
+    await triggerPiPayment();
 });
 
-function triggerPiPayment() {
-    alert("Payment system initialization paused until Auth layer verification.");
+async function triggerPiPayment() {
+    const submitBtn = document.getElementById('submitBtn');
+    const responseBox = document.getElementById('vouchResponse');
+    const targetUsername = document.getElementById('targetUsername').value.trim();
+    const validatorUsername = document.getElementById('validatorUsername').value.trim();
+
+    if (!isPiEngineReady) {
+        alert("Pi Engine is not ready. Please authenticate first.");
+        return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Initializing Pi Wallet Modal...";
+    responseBox.style.display = "none";
+
+    try {
+        const paymentData = {
+            amount: 0.1,
+            memo: `Merchant Attestation Fee for @${targetUsername}`,
+            metadata: { 
+                targetMerchant: targetUsername,
+                validatorOperator: validatorUsername 
+            }
+        };
+
+        console.log("[VouchGrid Payments] Launching wallet payment interface...");
+        
+        await window.Pi.createPayment(paymentData, {
+            onReadyForServerApproval: async (paymentId) => {
+                console.log("[VouchGrid Payments] Payment created on ledger. Approving ID:", paymentId);
+                const res = await fetch('/api/pi-payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'approve', paymentId })
+                });
+                const data = await res.json();
+                return data.success;
+            },
+            onReadyForServerCompletion: async (paymentId, txid) => {
+                console.log("[VouchGrid Payments] User signed transaction. Completing TxID:", txid);
+                
+                const res = await fetch('/api/pi-payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'complete', 
+                        paymentId, 
+                        txid,
+                        targetUsername,
+                        validatorUsername
+                    })
+                });
+                
+                const finalData = await res.json();
+                responseBox.style.display = "block";
+                
+                if (res.ok && finalData.success) {
+                    responseBox.className = "response-box success";
+                    responseBox.innerText = `Payment Complete & Attestation Approved!\nTxID: ${txid}`;
+                } else {
+                    throw new Error(finalData.error || "Failed to complete transaction database records.");
+                }
+            },
+            onCancel: (paymentId) => {
+                console.warn("[VouchGrid Payments] Transaction canceled by user:", paymentId);
+                responseBox.className = "response-box error";
+                responseBox.style.display = "block";
+                responseBox.innerText = "Payment process canceled by user.";
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Attestation Vouch";
+            },
+            onError: (error, payment) => {
+                console.error("[VouchGrid Payments] Critical Wallet Error:", error);
+                responseBox.className = "response-box error";
+                responseBox.style.display = "block";
+                responseBox.innerText = `Wallet Exception: ${error.message || "Transaction aborted."}`;
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Attestation Vouch";
+            }
+        });
+
+    } catch (err) {
+        console.error("[VouchGrid Payments] Error lifecycle:", err);
+        responseBox.className = "response-box error";
+        responseBox.style.display = "block";
+        responseBox.innerText = err.message || "Network Error.";
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Submit Attestation Vouch";
+    }
 }
 
+// Mandatory onIncompletePaymentFound handling to clear trapped tokens
 async function onIncompletePaymentFound(payment) {
-    console.warn("[VouchGrid Payments] Unresolved transactional payload found:", payment);
+    console.warn("[VouchGrid Payments] Unresolved transactional payload found. Clearing with engine:", payment.identifier);
+    await fetch('/api/pi-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            action: 'complete', 
+            paymentId: payment.identifier, 
+            txid: payment.transaction.txid, 
+            incompleteRecovery: true 
+        })
+    });
 }
 
 // --- 6. DATA REGISTRY QUERY ARCHITECTURE ---

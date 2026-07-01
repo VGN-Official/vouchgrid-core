@@ -1,78 +1,109 @@
-// Read the key securely from Vercel's Environment Variables
-const PI_NETWORK_API_KEY = process.env.PI_NETWORK_API_KEY;
+import { Redis } from '@upstash/redis';
+
+// Initialize the data memory layer safely via infrastructure context environment variables
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || '',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || ''
+});
 
 export default async function handler(req, res) {
-if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  // Safety check: Ensure the environment variable is loaded
-  if (!PI_NETWORK_API_KEY) {
-    console.error("Missing PI_NETWORK_API_KEY environment variable in Vercel settings.");
-    return res.status(500).json({ error: "Server misconfiguration: API key missing." });
-  }
-  
-  try {
-    const { action, paymentId, txid } = req.body;
-
-    if (!paymentId) {
-      return res.status(400).json({ error: "Missing paymentId context." });
+    if (req.method !== 'POST') {
+        return res.status(405).json({ success: false, error: "Method not allowed" });
     }
 
-    // Phase 1: Approve the payment via Pi Network API
-    if (action === "approve") {
-      console.log(`Submitting server approval for payment ID: ${paymentId}`);
-      
-      const piApproveRes = await fetch(`https://api.minepi.com/v2/payments/${paymentId}/approve`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Key ${PI_NETWORK_API_KEY}` 
+    const { action, paymentId, txid, targetUsername, validatorUsername, incompleteRecovery } = req.body;
+    
+    // Hardcoded API Key for testing/production deployment bypass
+    const apiKey = "w7cvctqnahva2nqmfw8gjsflu6aue1chhnonoqdoep2chp2pg9wudgnuxxihxvwb";
+
+    try {
+        if (action === 'approve') {
+            console.log(`[Backend Payments] Approving payment on Pi Blockchain Server for ID: ${paymentId}`);
+            
+            const approveRes = await fetch(`https://api.minepi.com/v2/payments/${paymentId}/approve`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Key ${apiKey}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!approveRes.ok) {
+                const errText = await approveRes.text();
+                throw new Error(`Pi Server approval rejection: ${errText}`);
+            }
+
+            return res.status(200).json({ success: true });
+
+        } else if (action === 'complete') {
+            console.log(`[Backend Payments] Completing transaction on Pi Blockchain Server for ID: ${paymentId}`);
+
+            const completeRes = await fetch(`https://api.minepi.com/v2/payments/${paymentId}/complete`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Key ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ txid })
+            });
+
+            if (!completeRes.ok) {
+                const errText = await completeRes.text();
+                throw new Error(`Pi Server completion rejection: ${errText}`);
+            }
+
+            const platformPaymentData = await completeRes.json();
+            console.log(`[Backend Payments] Transaction finalized successfully for TxID: ${txid}`);
+
+            // Skip database writing operations if this is an implicit onIncompletePaymentFound cleaning loop execution
+            if (incompleteRecovery) {
+                console.log("[Backend Payments] Recovery loop payment clearance routine complete.");
+                return res.status(200).json({ success: true, recovered: true });
+            }
+
+            // --- PRODUCTION DATA REGISTRY ATTESTATION PERSISTENCE WRITE ---
+            if (targetUsername && validatorUsername) {
+                const merchantKey = `user:${targetUsername.toLowerCase()}`;
+                
+                // Fetch current user or create clean layout object schemas matching lookup expectations
+                let userRecord = await redis.get(merchantKey);
+                if (!userRecord) {
+                    userRecord = {
+                        username: targetUsername,
+                        kycStatus: "PENDING",
+                        currentStatus: "PENDING",
+                        vouchesCount: 0,
+                        requiredVouches: 3,
+                        vouchesReceived: []
+                    };
+                } else if (typeof userRecord === 'string') {
+                    userRecord = JSON.parse(userRecord);
+                }
+
+                // Append the attestation if not already signed by this validator operator
+                if (!userRecord.vouchesReceived.includes(validatorUsername)) {
+                    userRecord.vouchesReceived.push(validatorUsername);
+                    userRecord.vouchesCount = userRecord.vouchesReceived.length;
+                    
+                    // Auto-escalate validation status to VERIFIED when reaching consensus weights threshold parameters
+                    if (userRecord.vouchesCount >= userRecord.requiredVouches) {
+                        userRecord.kycStatus = "VERIFIED";
+                        userRecord.currentStatus = "VERIFIED";
+                    }
+
+                    // Save transactional records back to Upstash key distribution
+                    await redis.set(merchantKey, JSON.stringify(userRecord));
+                    console.log(`[Backend Database] Identity ledger updated for @${targetUsername}. Total Attestations: ${userRecord.vouchesCount}`);
+                }
+            }
+
+            return res.status(200).json({ success: true, payment: platformPaymentData });
         }
-      });
 
-      if (!piApproveRes.ok) {
-        const errText = await piApproveRes.text();
-        console.error("Pi Server rejected approval request:", errText);
-        return res.status(400).json({ error: "Pi Network rejected server approval.", details: errText });
-      }
+        return res.status(400).json({ success: false, error: "Invalid action parameter specified." });
 
-      return res.status(200).json({ success: true, action: "approve" });
+    } catch (error) {
+        console.error("[Backend Payments] Runtime exception within payment pipeline:", error.message);
+        return res.status(500).json({ success: false, error: error.message });
     }
-
-    // Phase 2: Complete the payment via Pi Network API
-    if (action === "complete") {
-      if (!txid) {
-        return res.status(400).json({ error: "Missing ledger txid context for completion." });
-      }
-
-      console.log(`Submitting server completion for payment ID: ${paymentId}, TXID: ${txid}`);
-      
-      const piCompleteRes = await fetch(`https://api.minepi.com/v2/payments/${paymentId}/complete`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Key ${PI_NETWORK_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ txid })
-      });
-
-      if (!piCompleteRes.ok) {
-        const errText = await piCompleteRes.text();
-        console.error("Pi Server rejected completion handshake:", errText);
-        return res.status(400).json({ error: "Pi Network rejected server completion.", details: errText });
-      }
-
-      return res.status(200).json({ success: true, action: "complete" });
-    }
-
-    return res.status(400).json({ error: "Unknown payment action" });
-  } catch (error) {
-    console.error("Payment Handshake Error:", error);
-    return res.status(500).json({ error: "Internal processing crash" });
-  }
-
- }
+}
