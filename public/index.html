@@ -234,24 +234,8 @@ let isPiEngineReady = false;
 let verifiedPiUser = null;
 
 // --- 2. LIFE-CYCLE BOOT ENGAGEMENT ---
-// Fixed: Marked async properly so await initPiNetwork() compiles seamlessly
 window.addEventListener('DOMContentLoaded', async () => {
     console.log("[VouchGrid Grid] DOM Loaded. Initializing Pi Core Handshake safely...");
-    
-    // SAFETY TIMEOUT FALLBACK: Unlocks UI if the mobile browser freezes on initialization
-    setTimeout(() => {
-        const authStatusText = document.getElementById('authText');
-        if (!isPiEngineReady && authStatusText && authStatusText.innerText === "Authenticating Session...") {
-            console.warn("[VouchGrid Engine] Pi Core timeout. Activating developer fallback.");
-            authStatusText.innerText = "Developer Mode (Sandbox Bypass)";
-            
-            const validatorInput = document.getElementById('validatorUsername');
-            const submitBtn = document.getElementById('submitBtn');
-            if (validatorInput) validatorInput.value = "sandbox_developer_ibrahim";
-            if (submitBtn) submitBtn.disabled = false;
-        }
-    }, 4000);
-
     await initPiNetwork();
 });
 
@@ -295,8 +279,8 @@ async function authenticatePiUser() {
     if (authButton) authButton.style.display = "none";
 
     try {
-        console.log("[VouchGrid Grid] Triggering Pi.authenticate with expanded username and payments scopes...");
-        const auth = await window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound);
+        console.log("[VouchGrid Grid] Triggering Pi.authenticate with standard ['username'] scope...");
+        const auth = await window.Pi.authenticate(['username'], onIncompletePaymentFound);
         
         console.log("[VouchGrid Grid] Front-end token received. Shipping token to backend validation node...");
         
@@ -309,11 +293,13 @@ async function authenticatePiUser() {
         const verifyData = await verifyRes.json();
 
         if (verifyRes.ok && verifyData.success) {
-            console.log("[VouchGrid Grid] Backend handshake validated successfully for:", verifyData.user.username);
-            verifiedPiUser = verifyData.user;
+            console.log("[VouchGrid Grid] Backend handshake validated successfully for:", verifyData.username);
             
-            if (authStatusText) authStatusText.innerText = `Connected: @${verifyData.user.username}`;
-            if (validatorInput) validatorInput.value = verifyData.user.username;
+            // Set session profile parameters
+            verifiedPiUser = { username: verifyData.username };
+            
+            if (authStatusText) authStatusText.innerText = `Connected: @${verifyData.username}`;
+            if (validatorInput) validatorInput.value = verifyData.username;
             if (submitBtn) submitBtn.disabled = false;
         } else {
             throw new Error(verifyData.error || "Backend verification node rejected auth signature.");
@@ -326,102 +312,18 @@ async function authenticatePiUser() {
     }
 }
 
-// --- 5. COMPREHENSIVE U2A PAYMENT TRANSFERS ---
+// --- 5. COMPREHENSIVE U2A PAYMENT TRANSFERS (STUBBED FOR AUTH BASELINE) ---
 document.getElementById('vouchForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    
-    const submitBtn = document.getElementById('submitBtn');
-    const responseBox = document.getElementById('vouchResponse');
-    const targetUsername = document.getElementById('targetUsername').value.trim();
-    const validatorUsername = document.getElementById('validatorUsername').value.trim();
-
-    submitBtn.disabled = true;
-    submitBtn.innerText = "Initializing Pi Wallet Modal...";
-    responseBox.style.display = "none";
-
-    try {
-        const paymentData = {
-            amount: 0.1,
-            memo: `VouchGrid Merchant Attestation Fee for @${targetUsername}`,
-            metadata: { 
-                targetMerchant: targetUsername,
-                validatorOperator: validatorUsername 
-            }
-        };
-
-        console.log("[VouchGrid Payments] Launching wallet payment interface...");
-        
-        await window.Pi.createPayment(paymentData, {
-        onReadyForServerApproval: async (paymentId) => {
-                console.log("[VouchGrid Payments] Payment created on ledger. ID:", paymentId);
-                const res = await fetch('/api/pi-payment', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'approve', paymentId })
-                });
-                return res.ok;
-            },
-        onReadyForServerCompletion: async (paymentId, txid) => {
-                console.log("[VouchGrid Payments] User signed transaction. TxID:", txid);
-                
-               const res = await fetch('/api/pi-payment', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'complete', 
-                        paymentId, 
-                        txid,
-                        targetUsername,
-                        validatorUsername
-                    })
-                });
-                
-                const finalData = await res.json();
-                responseBox.style.display = "block";
-                
-                if (res.ok) {
-                    responseBox.className = "response-box success";
-                    responseBox.innerText = `Payment Complete & Attestation Approved!\nStatus: ${finalData.currentStatus || "SUCCESS"}\nConsensus Weight: ${finalData.vouchesCount || 1}/${finalData.requiredVouches || 3}`;
-                } else {
-                    throw new Error(finalData.error || "Failed to complete transaction database records.");
-                }
-            },
-            onCancel: (paymentId) => {
-                console.warn("[VouchGrid Payments] Transaction canceled by user:", paymentId);
-                responseBox.className = "response-box error";
-                responseBox.style.display = "block";
-                responseBox.innerText = "Payment process canceled by user.";
-                submitBtn.disabled = false;
-                submitBtn.innerText = "Submit Attestation Vouch";
-            },
-            onError: (error, payment) => {
-                console.error("[VouchGrid Payments] Critical Wallet Error:", error);
-                responseBox.className = "response-box error";
-                responseBox.style.display = "block";
-                responseBox.innerText = `Wallet Exception: ${error.message || "Transaction aborted."}`;
-                submitBtn.disabled = false;
-                submitBtn.innerText = "Submit Attestation Vouch";
-            }
-        });
-
-    } catch (err) {
-        console.error("[VouchGrid Payments] Error lifecycle:", err);
-        responseBox.className = "response-box error";
-        responseBox.style.display = "block";
-        responseBox.innerText = err.message || "Network Error.";
-        submitBtn.disabled = false;
-        submitBtn.innerText = "Submit Attestation Vouch";
-    }
+    alert("Authentication active. Ready for Payment integration phase.");
 });
 
-// Mandatory onIncompletePaymentFound handling
+function triggerPiPayment() {
+    alert("Payment system initialization paused until Auth layer verification.");
+}
+
 async function onIncompletePaymentFound(payment) {
-    console.warn("[VouchGrid Payments] Unresolved transactional payload found. Clearing with engine:", payment.identifier);
-    await fetch('/api/pi-payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'complete', paymentId: payment.identifier, txid: payment.transaction.txid, incompleteRecovery: true })
-    });
+    console.warn("[VouchGrid Payments] Unresolved transactional payload found:", payment);
 }
 
 // --- 6. DATA REGISTRY QUERY ARCHITECTURE ---

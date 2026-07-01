@@ -5,10 +5,11 @@
   "description": "Decentralized Behavioral Attestation & Identity Vouch Engine",
   "main": "index.js",
   "scripts": {
-    "start": "echo \"Ready for local development matrix\" && exit 0"
+    "start": "node index.js"
   },
   "dependencies": {
-    "@upstash/redis": "^1.38.0"
+    "@upstash/redis": "^1.38.0",
+    "express": "^4.19.2"
   },
   "engines": {
     "node": ">=18.0.0"
