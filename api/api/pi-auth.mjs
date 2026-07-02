@@ -1,5 +1,10 @@
-// POST /api/pi-auth
-app.post('/api/pi-auth', async (req, res) => {
+// Export default handler for Vercel Serverless environment
+export default async function handler(req, res) {
+    // Replaces app.post check
+    if (req.method !== 'POST') {
+        return res.status(405).json({ success: false, error: "Method not allowed" });
+    }
+
     try {
         const { accessToken } = req.body;
         
@@ -34,7 +39,7 @@ app.post('/api/pi-auth', async (req, res) => {
         });
 
     } catch (error) {
-        console.error("[Backend Auth] Intercepted runtime authentication failure loop:", error);
+        console.error("[Backend Auth] Intercepted runtime authentication failure loop:", error.message || error);
         return res.status(500).json({ success: false, error: "Internal session identity pipeline failure." });
     }
-});
+}
