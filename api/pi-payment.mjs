@@ -13,8 +13,12 @@ export default async function handler(req, res) {
 
     const { action, paymentId, txid, targetUsername, validatorUsername, incompleteRecovery } = req.body;
     
+    // Fallback extraction to pull usernames whether they are passed flat or nested in metadata
+    const targetUsername = req.body.targetUsername || req.body.metadata?.targetMerchant;
+    const validatorUsername = req.body.validatorUsername || req.body.metadata?.validatorOperator;
+
     // Hardcoded API Key for testing/production deployment bypass
-    const apiKey = "w7cvctqnahva2nqmfw8gjsflu6aue1chhnonoqdoep2chp2pg9wudgnuxxihxvwb";
+    const apiKey = "k1skjgq1ifcgj2btwwasnbt9oimu9snfudszhunassrcoxkppwz55reyi3ipeb88";
 
     try {
         if (action === 'approve') {
