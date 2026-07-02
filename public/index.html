@@ -248,12 +248,22 @@ async function initPiNetwork() {
         if (window.Pi) {
             if (authStatusText) authStatusText.innerText = "Authenticating Session...";
             
-            console.log("[VouchGrid Grid] Awaiting Pi.init Promise layer...");
-            await window.Pi.init({ version: "2.0", sandbox: true });
+            // Automatically detect if running inside a sandbox or staging environment
+            const isSandbox = window.location.hostname.includes('vercel.app') || 
+                              window.location.hostname.includes('localhost') || 
+                              window.location.hostname.includes('local');
+
+            window.Pi.init({ 
+                version: "2.0", 
+                sandbox: isSandbox 
+            });
+            console.log(`[Pi SDK] Initialized with Sandbox Mode: ${isSandbox}`);
+            //console.log("[VouchGrid Grid] Awaiting Pi.init Promise layer...");
+            //await window.Pi.init({ version: "2.0", sandbox: true });
             
-            isInitialized = true;
-            isPiEngineReady = true;
-            console.log("[VouchGrid Grid] Pi.init Promise resolved successfully.");
+            //isInitialized = true;
+            //isPiEngineReady = true;
+            //console.log("[VouchGrid Grid] Pi.init Promise resolved successfully.");
             
             await authenticatePiUser();
         } else {
