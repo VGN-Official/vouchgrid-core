@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@upstash/redis": "^1.38.0",
+    "@vercel/node": "^5.8.22",
     "express": "^4.19.2"
   },
   "engines": {
