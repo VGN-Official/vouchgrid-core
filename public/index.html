@@ -230,8 +230,8 @@
 <script>
 // --- 1. GLOBAL SYSTEM STATES ---
 let isInitialized = false;
-let isPiEngineReady = false;
-let verifiedPiUser = null;
+let isPiEngineReady = window.isPiEngineReady || false; // Checks global window memory first!
+let verifiedPiUser = localStorage.getItem('pi_user') || null;
 
 // --- 2. LIFE-CYCLE BOOT ENGAGEMENT ---
 window.addEventListener('DOMContentLoaded', async () => {
@@ -258,12 +258,12 @@ async function initPiNetwork() {
                 sandbox: isSandbox 
             });
             console.log(`[Pi SDK] Initialized with Sandbox Mode: ${isSandbox}`);
-            //console.log("[VouchGrid Grid] Awaiting Pi.init Promise layer...");
-            //await window.Pi.init({ version: "2.0", sandbox: true });
+            console.log("[VouchGrid Grid] Awaiting Pi.init Promise layer...");
+            await window.Pi.init({ version: "2.0", sandbox: true });
             
-            //isInitialized = true;
-            //isPiEngineReady = true;
-            //console.log("[VouchGrid Grid] Pi.init Promise resolved successfully.");
+            isInitialized = true;
+            isPiEngineReady = true;
+            console.log("[VouchGrid Grid] Pi.init Promise resolved successfully.");
             
             await authenticatePiUser();
         } else {
@@ -305,6 +305,10 @@ async function authenticatePiUser() {
         if (verifyRes.ok && verifyData.success) {
             console.log("[VouchGrid Grid] Backend handshake validated successfully for:", verifyData.username);
             verifiedPiUser = { username: verifyData.username };
+            isPiEngineReady = true; // Reinforce active operational status
+
+            // Persist session to local disk structure
+            localStorage.setItem('pi_user', verifyData.username);
             
             if (authStatusText) authStatusText.innerText = `Connected: @${verifyData.username}`;
             if (validatorInput) validatorInput.value = verifyData.username;
