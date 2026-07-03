@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { redis } from './_db';
+import { redis } from './_db.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: "Method not allowed" });
-
+  
   const { action, paymentId, txid } = req.body;
   const targetUsername = req.body.targetUsername || req.body.metadata?.targetMerchant;
   const validatorUsername = req.body.validatorUsername || req.body.metadata?.validatorOperator;
