@@ -312,7 +312,7 @@ async function authenticatePiUser() {
         // Wrapped with timeout protection to prevent background hangs inside webview
         const auth = await withTimeout(
             window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound),
-            8000,
+            20000,
             'Pi.authenticate'
         );
 
