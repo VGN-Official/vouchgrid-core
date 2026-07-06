@@ -239,58 +239,40 @@ window.addEventListener('DOMContentLoaded', async () => {
     await initPiNetwork();
 });
 
-// --- Helper Functions for Sandbox Safety ---
-// Helper: reject if the given promise doesn't settle in `ms`.
-function withTimeout(promise, ms, label) {
-    return Promise.race([
-        promise,
-        new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-        )
-    ]);
-}
-
-// Helper: are we actually running inside the Pi Browser?
-function isPiBrowser() {
-    return /PiBrowser/i.test(navigator.userAgent);
-}
-
 // --- 3. PLATFORM CORE INITIALIZATION ENGINE ---
 async function initPiNetwork() {
     const authStatusText = document.getElementById('authText');
     const authButton = document.getElementById('authBtn');
-
-    if (!window.Pi) {
-        if (authStatusText) authStatusText.innerText = "Pi SDK failed to load";
-        if (authButton) authButton.style.display = "block";
-        return;
-    }
-
-    // Pi.authenticate / Pi.createPayment only work inside the Pi Browser.
-    // Outside it, the SDK's postMessage bridge silently fails and hangs.
-    if (!isPiBrowser()) {
-        if (authStatusText) authStatusText.innerText = "Open this app inside the Pi Browser to sign in";
-        if (authButton) authButton.style.display = "block";
-        return;
-    }
-
+    
     try {
-        if (authStatusText) authStatusText.innerText = "Authenticating Session...";
+        if (window.Pi) {
+            if (authStatusText) authStatusText.innerText = "Authenticating Session...";
+            
+            // Automatically detect if running inside a sandbox or staging environment
+            const isSandbox = window.location.hostname.includes('vercel.app') || 
+                              window.location.hostname.includes('localhost') || 
+                              window.location.hostname.includes('local');
 
-        // Automatically detect if running inside a sandbox or staging environment
-        const isSandbox = window.location.hostname.includes('vercel.app') || 
-                          window.location.hostname.includes('localhost') || 
-                          window.location.hostname.includes('local');
-
-        // Initialize ONCE safely.
-        await window.Pi.init({ version: "2.0", sandbox: isSandbox });
-        isInitialized = true;
-        isPiEngineReady = true;
-        console.log("[VouchGrid] Pi.init resolved.");
-
-        await authenticatePiUser();
+            window.Pi.init({ 
+                version: "2.0", 
+                sandbox: isSandbox 
+            });
+            console.log(`[Pi SDK] Initialized with Sandbox Mode: ${isSandbox}`);
+            console.log("[VouchGrid Grid] Awaiting Pi.init Promise layer...");
+            await window.Pi.init({ version: "2.0", sandbox: true });
+            
+            isInitialized = true;
+            isPiEngineReady = true;
+            console.log("[VouchGrid Grid] Pi.init Promise resolved successfully.");
+            
+            await authenticatePiUser();
+        } else {
+            console.error("[VouchGrid Grid] window.Pi script resource not found.");
+            if (authStatusText) authStatusText.innerText = "Pi SDK Script Missing";
+            if (authButton) authButton.style.display = "block";
+        }
     } catch (err) {
-        console.error("[VouchGrid] Init failure:", err);
+        console.error("[VouchGrid Grid] Critical Promise Initialization Failure:", err);
         if (authStatusText) authStatusText.innerText = "Connection Refused";
         if (authButton) authButton.style.display = "block";
     }
@@ -308,14 +290,8 @@ async function authenticatePiUser() {
 
     try {
         console.log("[VouchGrid Grid] Triggering Pi.authenticate with expanded username and payments scopes...");
+        const auth = await window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound);
         
-        // Wrapped with timeout protection to prevent background hangs inside webview
-        const auth = await withTimeout(
-            window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound),
-            8000,
-            'Pi.authenticate'
-        );
-
         console.log("[VouchGrid Grid] Front-end token received. Shipping token to backend validation node...");
         
         const verifyRes = await fetch('/api/pi-auth', {
@@ -349,13 +325,10 @@ async function authenticatePiUser() {
 }
 
 // --- 5. COMPREHENSIVE U2A PAYMENT TRANSFERS ---
-const vouchForm = document.getElementById('vouchForm');
-if (vouchForm) {
-    vouchForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await triggerPiPayment();
-    });
-}
+document.getElementById('vouchForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await triggerPiPayment();
+});
 
 async function triggerPiPayment() {
     const submitBtn = document.getElementById('submitBtn');
@@ -368,11 +341,9 @@ async function triggerPiPayment() {
         return;
     }
 
-    if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.innerText = "Initializing Pi Wallet Modal...";
-    }
-    if (responseBox) responseBox.style.display = "none";
+    submitBtn.disabled = true;
+    submitBtn.innerText = "Initializing Pi Wallet Modal...";
+    responseBox.style.display = "none";
 
     try {
         const paymentData = {
@@ -413,54 +384,40 @@ async function triggerPiPayment() {
                 });
                 
                 const finalData = await res.json();
-                if (responseBox) responseBox.style.display = "block";
+                responseBox.style.display = "block";
                 
                 if (res.ok && finalData.success) {
-                    if (responseBox) {
-                        responseBox.className = "response-box success";
-                        responseBox.innerText = `Payment Complete & Attestation Approved!\nTxID: ${txid}`;
-                    }
+                    responseBox.className = "response-box success";
+                    responseBox.innerText = `Payment Complete & Attestation Approved!\nTxID: ${txid}`;
                 } else {
                     throw new Error(finalData.error || "Failed to complete transaction database records.");
                 }
             },
             onCancel: (paymentId) => {
                 console.warn("[VouchGrid Payments] Transaction canceled by user:", paymentId);
-                if (responseBox) {
-                    responseBox.className = "response-box error";
-                    responseBox.style.display = "block";
-                    responseBox.innerText = "Payment process canceled by user.";
-                }
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.innerText = "Submit Attestation Vouch";
-                }
+                responseBox.className = "response-box error";
+                responseBox.style.display = "block";
+                responseBox.innerText = "Payment process canceled by user.";
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Attestation Vouch";
             },
             onError: (error, payment) => {
                 console.error("[VouchGrid Payments] Critical Wallet Error:", error);
-                if (responseBox) {
-                    responseBox.className = "response-box error";
-                    responseBox.style.display = "block";
-                    responseBox.innerText = `Wallet Exception: ${error.message || "Transaction aborted."}`;
-                }
-                if (submitBtn) {
-                    submitBtn.disabled = false;
-                    submitBtn.innerText = "Submit Attestation Vouch";
-                }
+                responseBox.className = "response-box error";
+                responseBox.style.display = "block";
+                responseBox.innerText = `Wallet Exception: ${error.message || "Transaction aborted."}`;
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Submit Attestation Vouch";
             }
         });
 
     } catch (err) {
         console.error("[VouchGrid Payments] Error lifecycle:", err);
-        if (responseBox) {
-            responseBox.className = "response-box error";
-            responseBox.style.display = "block";
-            responseBox.innerText = err.message || "Network Error.";
-        }
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerText = "Submit Attestation Vouch";
-        }
+        responseBox.className = "response-box error";
+        responseBox.style.display = "block";
+        responseBox.innerText = err.message || "Network Error.";
+        submitBtn.disabled = false;
+        submitBtn.innerText = "Submit Attestation Vouch";
     }
 }
 
@@ -490,11 +447,9 @@ async function lookupMerchant() {
         return;
     }
 
-    if (searchBtn) {
-        searchBtn.disabled = true;
-        searchBtn.innerText = "Querying Cloud Grid...";
-    }
-    if (responseBox) responseBox.style.display = "none";
+    searchBtn.disabled = true;
+    searchBtn.innerText = "Querying Cloud Grid...";
+    responseBox.style.display = "none";
 
     try {
         const response = await fetch('/api/submit-vouch', {
@@ -504,41 +459,33 @@ async function lookupMerchant() {
         });
 
         const data = await response.json();
-        if (responseBox) responseBox.style.display = "block";
+        responseBox.style.display = "block";
 
         if (response.ok || data.user) {
-            if (responseBox) {
-                responseBox.className = "response-box success";
-                const profile = data.user || data;
-                
-                let badgeClass = profile.currentStatus === 'VERIFIED' || profile.kycStatus === 'VERIFIED' ? 'badge-verified' : 'badge-pending';
-                let statusText = profile.currentStatus || profile.kycStatus || "PENDING";
-                let count = profile.vouchesCount !== undefined ? profile.vouchesCount : (profile.vouchesReceived ? profile.vouchesReceived.length : 0);
-                let reqCount = profile.requiredVouches || 3;
+            responseBox.className = "response-box success";
+            const profile = data.user || data;
+            
+            let badgeClass = profile.currentStatus === 'VERIFIED' || profile.kycStatus === 'VERIFIED' ? 'badge-verified' : 'badge-pending';
+            let statusText = profile.currentStatus || profile.kycStatus || "PENDING";
+            let count = profile.vouchesCount !== undefined ? profile.vouchesCount : (profile.vouchesReceived ? profile.vouchesReceived.length : 0);
+            let reqCount = profile.requiredVouches || 3;
 
-                responseBox.innerHTML = `
-                    <strong>Merchant ID:</strong> @${username}<br>
-                    <strong>Network Status:</strong> <span class="profile-badge ${badgeClass}">${statusText}</span><br>
-                    <strong>Consensus Weight:</strong> ${count}/${reqCount} Attestations Verified
-                `;
-            }
+            responseBox.innerHTML = `
+                <strong>Merchant ID:</strong> @${username}<br>
+                <strong>Network Status:</strong> <span class="profile-badge ${badgeClass}">${statusText}</span><br>
+                <strong>Consensus Weight:</strong> ${count}/${reqCount} Attestations Verified
+            `;
         } else {
-            if (responseBox) {
-                responseBox.className = "response-box error";
-                responseBox.innerText = `System Notice: ${data.error || "No active record found."}`;
-            }
+            responseBox.className = "response-box error";
+            responseBox.innerText = `System Notice: ${data.error || "No active record found."}`;
         }
     } catch (err) {
-        if (responseBox) {
-            responseBox.style.display = "block";
-            responseBox.className = "response-box error";
-            responseBox.innerText = `Network Failure: Failed to pull data from memory layer.`;
-        }
+        responseBox.style.display = "block";
+        responseBox.className = "response-box error";
+        responseBox.innerText = `Network Failure: Failed to pull data from memory layer.`;
     } finally {
-        if (searchBtn) {
-            searchBtn.disabled = false;
-            searchBtn.innerText = "Verify Merchant Credential";
-        }
+        searchBtn.disabled = false;
+        searchBtn.innerText = "Verify Merchant Credential";
     }
 }
 
@@ -547,14 +494,12 @@ function switchTab(viewId, element) {
     document.querySelectorAll('.card').forEach(card => card.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     
-    const viewTarget = document.getElementById(viewId);
-    if (viewTarget) viewTarget.classList.add('active');
-    if (element) element.classList.add('active');
+    document.getElementById(viewId).classList.add('active');
+    element.classList.add('active');
 }
 
 function withAuthCheck(viewId, element) {
-    const validatorUsernameElem = document.getElementById('validatorUsername');
-    const validatorUsername = validatorUsernameElem ? validatorUsernameElem.value : "";
+    const validatorUsername = document.getElementById('validatorUsername').value;
     if (!validatorUsername) {
         alert("Please complete Pi Network authentication first to open the Operator Portal.");
         authenticatePiUser();
