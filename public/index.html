@@ -284,7 +284,7 @@ async function initPiNetwork() {
 
         // Initialize ONCE safely.
         //await window.Pi.init({ version: "2.0", sandbox: isSandbox });
-        await window.Pi.init({ version: "2.0", sandbox: true });
+        await window.Pi.init({ version: "2.0", sandbox: false });
         isInitialized = true;
         isPiEngineReady = true;
         console.log("[VouchGrid] Pi.init resolved.");
