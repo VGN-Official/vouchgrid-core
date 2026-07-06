@@ -239,7 +239,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     await initPiNetwork();
 });
 
-// --- Helper Functions for Sandbox Safety ---
+// --- HELPER FUNCTIONS ---
 // Helper: reject if the given promise doesn't settle in `ms`.
 function withTimeout(promise, ms, label) {
     return Promise.race([
@@ -258,7 +258,7 @@ function isPiBrowser() {
 // --- 3. PLATFORM CORE INITIALIZATION ENGINE ---
 async function initPiNetwork() {
     const authStatusText = document.getElementById('authText');
-    const authButton = document.getElementById('authBtn');
+    const authButton     = document.getElementById('authBtn');
 
     if (!window.Pi) {
         if (authStatusText) authStatusText.innerText = "Pi SDK failed to load";
@@ -277,15 +277,9 @@ async function initPiNetwork() {
     try {
         if (authStatusText) authStatusText.innerText = "Authenticating Session...";
 
-        // Automatically detect if running inside a sandbox or staging environment
-        const isSandbox = window.location.hostname.includes('vercel.app') || 
-                          window.location.hostname.includes('localhost') || 
-                          window.location.hostname.includes('local');
-
-        // Initialize ONCE safely.
-        //await window.Pi.init({ version: "2.0", sandbox: isSandbox });
-        await window.Pi.init({ version: "2.0", sandbox: false });
-        isInitialized = true;
+        // Initialize ONCE (previous code called Pi.init twice).
+        await window.Pi.init({ version: "2.0", sandbox: true });
+        isInitialized   = true;
         isPiEngineReady = true;
         console.log("[VouchGrid] Pi.init resolved.");
 
@@ -310,10 +304,10 @@ async function authenticatePiUser() {
     try {
         console.log("[VouchGrid Grid] Triggering Pi.authenticate with expanded username and payments scopes...");
         
-        // Wrapped with timeout protection to prevent background hangs inside webview
+        // Handshake wrapper integrated with timeout safety guard
         const auth = await withTimeout(
-            window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound),
-            20000,
+            window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound),    
+            8000,    
             'Pi.authenticate'
         );
 
