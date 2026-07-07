@@ -222,7 +222,7 @@
             </div>
             <button type="submit" class="submit-btn" id="submitBtn" disabled>Submit Attestation Vouch</button>
 
-            <button type="button" id="testPaymentBtn">Run Test Pi Payment</button>
+            <!--<button type="button" id="testPaymentBtn">Run Test Pi Payment</button>-->
             </form>
         <div id="vouchResponse" class="response-box"></div>
     </div>
@@ -427,6 +427,10 @@ async function triggerPiPayment() {
                     if (responseBox) {
                         responseBox.className = "response-box success";
                         responseBox.innerText = `Payment Complete & Attestation Approved!\nTxID: ${txid}`;
+                    }
+
+                    if (submitBtn) {
+                            submitBtn.innerText = "Attestation Approved! ✓";
                     }
                 } else {
                     throw new Error(finalData.error || "Failed to complete transaction database records.");
