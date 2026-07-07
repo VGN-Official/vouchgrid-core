@@ -508,7 +508,7 @@ async function lookupMerchant() {
     if (responseBox) responseBox.style.display = "none";
 
     try {
-        const response = await fetch('/api/submit-vouch', {
+        const response = await fetch('/api/lookup-merchant', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ targetUsername: username, validatorUsername: "PUBLIC_LOOKUP_QUERY" })
