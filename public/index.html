@@ -495,6 +495,10 @@ async function lookupMerchant() {
     if (responseBox) responseBox.style.display = "none";
 
     try {
+        // 1. Await the secure auth handshake token
+        console.log("[VouchGrid] Fetching fresh authorization token for memory-layer query...");
+        const auth = await authWithTimeout();
+        
         const response = await fetch('/api/submit-vouch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
