@@ -240,43 +240,63 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 // --- 3. PLATFORM CORE INITIALIZATION ENGINE ---
+// Helper: reject if the given promise doesn't settle in `ms`.
+function withTimeout(promise, ms, label) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+        )
+    ]);
+}
+
+// Helper: are we actually running inside the Pi Browser?
+function isPiBrowser() {
+    return /PiBrowser/i.test(navigator.userAgent);
+}
+
 async function initPiNetwork() {
     const authStatusText = document.getElementById('authText');
-    const authButton = document.getElementById('authBtn');
-    
-    try {
-        if (window.Pi) {
-            if (authStatusText) authStatusText.innerText = "Authenticating Session...";
-            
-            // Automatically detect if running inside a sandbox or staging environment
-            const isSandbox = window.location.hostname.includes('vercel.app') || 
-                              window.location.hostname.includes('localhost') || 
-                              window.location.hostname.includes('local');
+    const authButton     = document.getElementById('authBtn');
 
-            window.Pi.init({ 
-                version: "2.0", 
-                sandbox: isSandbox 
-            });
-            console.log(`[Pi SDK] Initialized with Sandbox Mode: ${isSandbox}`);
-            console.log("[VouchGrid Grid] Awaiting Pi.init Promise layer...");
-            await window.Pi.init({ version: "2.0", sandbox: true });
-            
-            isInitialized = true;
-            isPiEngineReady = true;
-            console.log("[VouchGrid Grid] Pi.init Promise resolved successfully.");
-            
-            await authenticatePiUser();
-        } else {
-            console.error("[VouchGrid Grid] window.Pi script resource not found.");
-            if (authStatusText) authStatusText.innerText = "Pi SDK Script Missing";
-            if (authButton) authButton.style.display = "block";
-        }
+    if (!window.Pi) {
+        authStatusText.innerText = "Pi SDK failed to load";
+        authButton.style.display = "block";
+        return;
+    }
+
+    // Pi.authenticate / Pi.createPayment only work inside the Pi Browser.
+    // Outside it, the SDK's postMessage bridge silently fails and hangs.
+    if (!isPiBrowser()) {
+        authStatusText.innerText = "Open this app inside the Pi Browser to sign in";
+        authButton.style.display = "block";
+        return;
+    }
+
+    try {
+        authStatusText.innerText = "Authenticating Session...";
+
+        // Initialize ONCE (previous code called Pi.init twice).
+        await window.Pi.init({ version: "2.0", sandbox: true });
+        isInitialized   = true;
+        isPiEngineReady = true;
+        console.log("[VouchGrid] Pi.init resolved.");
+
+        await authenticatePiUser();
     } catch (err) {
-        console.error("[VouchGrid Grid] Critical Promise Initialization Failure:", err);
-        if (authStatusText) authStatusText.innerText = "Connection Refused";
-        if (authButton) authButton.style.display = "block";
+        console.error("[VouchGrid] Init failure:", err);
+        authStatusText.innerText = "Connection Refused";
+        authButton.style.display = "block";
     }
 }
+
+// In authenticatePiUser(), wrap the Pi.authenticate call so it can't hang:
+//
+//   const auth = await withTimeout(
+//       window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound),
+//       8000,
+//       'Pi.authenticate'
+//   );
 
 // --- 4. SECURE USER AUTHENTICATION NODES ---
 async function authenticatePiUser() {
@@ -290,7 +310,12 @@ async function authenticatePiUser() {
 
     try {
         console.log("[VouchGrid Grid] Triggering Pi.authenticate with expanded username and payments scopes...");
-        const auth = await window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound);
+       const auth = await withTimeout(
+    window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound),
+    8000,
+    'Pi.authenticate'
+       );
+    
         
         console.log("[VouchGrid Grid] Front-end token received. Shipping token to backend validation node...");
         
