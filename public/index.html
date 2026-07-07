@@ -313,11 +313,11 @@ async function authenticatePiUser() {
     try {
         console.log("[VouchGrid Grid] Triggering Pi.authenticate with expanded username and payments scopes...");
         
-        //const auth = await withTimeout(
-           // window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound),
-           // 8000,
-           // 'Pi.authenticate'
-       // );
+        const auth = await withTimeout(
+            window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound),
+            8000,
+            'Pi.authenticate'
+        );
         
         console.log("[VouchGrid Grid] Front-end token received. Shipping token to backend validation node...");
         
