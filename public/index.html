@@ -313,45 +313,68 @@ async function authenticatePiUser() {
     try {
         console.log("[VouchGrid Grid] Triggering Pi.authenticate with expanded username and payments scopes...");
         
-        const auth = await withTimeout(
-            window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound),
-            8000,
-            'Pi.authenticate'
-        );
-        
-        console.log("[VouchGrid Grid] Front-end token received. Shipping token to backend validation node...");
-        
-        const verifyRes = await fetch('/api/pi-auth', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ accessToken: auth.accessToken })
-        });
-        
-        const verifyData = await verifyRes.json();
+        const auth = await authWithTimeout(["username","payments"]);
+const res = await fetch("/api/verify-merchant", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${auth.accessToken}`,
+  },
+  body: JSON.stringify({ merchantId }),
+});
+if (!res.ok) throw new Error(`Memory layer ${res.status}: ${await res.text()}`);
+const data = await res.json();
 
-        if (verifyRes.ok && verifyData.success) {
-            console.log("[VouchGrid Grid] Backend handshake validated successfully for:", verifyData.username);
+        
+        //const auth = await withTimeout(
+          //  window.Pi.authenticate(['username', 'payments'], onIncompletePaymentFound),
+            //8000,
+            //'Pi.authenticate'
+        //);
+        
+        //console.log("[VouchGrid Grid] Front-end token received. Shipping token to backend validation node...");
+        
+        //const verifyRes = await fetch('/api/pi-auth', {
+          //  method: 'POST',
+            //headers: { 'Content-Type': 'application/json' },
+            //body: JSON.stringify({ accessToken: auth.accessToken })
+        //});
+        
+        //const verifyData = await verifyRes.json();
+
+        //if (verifyRes.ok && verifyData.success) {
+          //  console.log("[VouchGrid Grid] Backend handshake validated successfully for:", verifyData.username);
             
             // Set engine state true ONLY after explicit authentication confirmation
-            verifiedPiUser = { username: verifyData.username };
-            isPiEngineReady = true; 
+            //verifiedPiUser = { username: verifyData.username };
+            //isPiEngineReady = true; 
 
-            localStorage.setItem('pi_user', verifyData.username);
+            //localStorage.setItem('pi_user', verifyData.username);
             
-            if (authStatusText) authStatusText.innerText = `Connected: @${verifyData.username}`;
-            if (validatorInput) validatorInput.value = verifyData.username;
-            if (submitBtn) submitBtn.disabled = false;
-        } else {
-            throw new Error(verifyData.error || "Backend verification node rejected auth signature.");
-        }
+            //if (authStatusText) authStatusText.innerText = `Connected: @${verifyData.username}`;
+            //if (validatorInput) validatorInput.value = verifyData.username;
+            //if (submitBtn) submitBtn.disabled = false;
+        //} else {
+          //  throw new Error(verifyData.error || "Backend verification node rejected auth signature.");
+        //}
     } catch (err) {
+        
+        document.body.insertAdjacentHTML("beforeend",
+    `<pre style="position:fixed;bottom:0;left:0;right:0;background:#000;color:#0f0;padding:8px;font-size:11px;z-index:9999">${e.message}\n${e.stack||""}</pre>`);
+  throw e;
+
+        
         console.error("[VouchGrid Grid] Secure Session Handshake Denied:", err);
         isPiEngineReady = false; // Force error recovery state
         if (authStatusText) authStatusText.innerText = "Authentication Failed";
         if (authButton) authButton.style.display = "block";
         if (validatorInput) validatorInput.value = "";
     }
+
+    
 }
+
+
 
 // --- 5. COMPREHENSIVE U2A PAYMENT TRANSFERS ---
 // This event listener attaches the payment logic explicitly to your purple button
