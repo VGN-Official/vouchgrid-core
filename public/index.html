@@ -332,31 +332,31 @@ const data = await res.json();
             //'Pi.authenticate'
         //);
         
-        //console.log("[VouchGrid Grid] Front-end token received. Shipping token to backend validation node...");
+        console.log("[VouchGrid Grid] Front-end token received. Shipping token to backend validation node...");
         
-        //const verifyRes = await fetch('/api/pi-auth', {
-          //  method: 'POST',
-            //headers: { 'Content-Type': 'application/json' },
-            //body: JSON.stringify({ accessToken: auth.accessToken })
-        //});
+        const verifyRes = await fetch('/api/pi-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accessToken: auth.accessToken })
+        });
         
-        //const verifyData = await verifyRes.json();
+        const verifyData = await verifyRes.json();
 
-        //if (verifyRes.ok && verifyData.success) {
-          //  console.log("[VouchGrid Grid] Backend handshake validated successfully for:", verifyData.username);
+        if (verifyRes.ok && verifyData.success) {
+            console.log("[VouchGrid Grid] Backend handshake validated successfully for:", verifyData.username);
             
-            // Set engine state true ONLY after explicit authentication confirmation
-            //verifiedPiUser = { username: verifyData.username };
-            //isPiEngineReady = true; 
+             //Set engine state true ONLY after explicit authentication confirmation
+            verifiedPiUser = { username: verifyData.username };
+            isPiEngineReady = true; 
 
-            //localStorage.setItem('pi_user', verifyData.username);
+            localStorage.setItem('pi_user', verifyData.username);
             
-            //if (authStatusText) authStatusText.innerText = `Connected: @${verifyData.username}`;
-            //if (validatorInput) validatorInput.value = verifyData.username;
-            //if (submitBtn) submitBtn.disabled = false;
-        //} else {
-          //  throw new Error(verifyData.error || "Backend verification node rejected auth signature.");
-        //}
+            if (authStatusText) authStatusText.innerText = `Connected: @${verifyData.username}`;
+            if (validatorInput) validatorInput.value = verifyData.username;
+            if (submitBtn) submitBtn.disabled = false;
+        } else {
+            throw new Error(verifyData.error || "Backend verification node rejected auth signature.");
+        }
     } catch (err) {
         
         document.body.insertAdjacentHTML("beforeend",
