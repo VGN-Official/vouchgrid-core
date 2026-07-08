@@ -314,66 +314,69 @@ async function authenticatePiUser() {
         console.log("[VouchGrid Grid] Triggering Pi.authenticate with expanded username and payments scopes...");
         
         
-    // 1) Authenticate with Pi FIRST
-    const auth = await authWithTimeout(["username", "payments"]);
-    if (!auth || !auth.accessToken) {
-        throw new Error("Pi.authenticate returned no accessToken");
+    
+        // 1) Authenticate with Pi FIRST
+        const auth = await authWithTimeout(["username", "payments"]);
+        if (!auth || !auth.accessToken) {
+            throw new Error("Pi.authenticate returned no accessToken");
+        }
+
+        console.log("[VouchGrid] Token received. Validating with backend...");
+
+        // 2) Validate the token with your backend
+        const verifyRes = await fetch('/api/pi-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accessToken: auth.accessToken })
+        });
+        const verifyData = await verifyRes.json().catch(() => ({}));
+
+        if (!verifyRes.ok || !verifyData.success) {
+            throw new Error(verifyData.error || `Backend rejected token (${verifyRes.status})`);
+        }
+
+        console.log("[VouchGrid] Handshake validated for:", verifyData.username);
+        verifiedPiUser = { username: verifyData.username };
+        isPiEngineReady = true;
+        localStorage.setItem('pi_user', verifyData.username);
+
+        if (authStatusText) authStatusText.innerText = `Connected: @${verifyData.username}`;
+        if (validatorInput) validatorInput.value = verifyData.username;
+        if (submitBtn) submitBtn.disabled = false;
+
+        const merchantId = document.getElementById('searchUsername')?.value.trim() || "";
+
+        // 3) Only query memory layer if there is an active search query present
+        if (merchantId) {
+            const res = await fetch("/api/verify-merchant", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${auth.accessToken}`,
+                },
+                body: JSON.stringify({ merchantId })
+            });
+            if (!res.ok) throw new Error(`Memory layer ${res.status}: ${await res.text()}`);
+            const data = await res.json();
+            console.log("[VouchGrid] Memory layer payload retrieved:", data);
+            // ...use data...
+        } else {
+            console.log("[VouchGrid] Clear authentication complete. Standing by for user lookup actions.");
+        }
+
+    } catch (err) {
+        console.error("[VouchGrid] Handshake denied:", err);
+        // Visible on-screen debug (remove once fixed)
+        document.body.insertAdjacentHTML(
+            "beforeend",
+            `<pre style="position:fixed;bottom:0;left:0;right:0;background:#111;color:#0f0;padding:8px;font:12px monospace;white-space:pre-wrap;z-index:9999">${err.message}\n${err.stack || ""}</pre>`
+        );
+        isPiEngineReady = false;
+        if (authStatusText) authStatusText.innerText = "Authentication Failed";
+        if (authButton) authButton.style.display = "block";
+        if (validatorInput) validatorInput.value = "";
     }
-
-    console.log("[VouchGrid] Token received. Validating with backend...");
-
-    // 2) Validate the token with your backend
-    const verifyRes = await fetch('/api/pi-auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: auth.accessToken })
-    });
-    const verifyData = await verifyRes.json().catch(() => ({}));
-
-    if (!verifyRes.ok || !verifyData.success) {
-        throw new Error(verifyData.error || `Backend rejected token (${verifyRes.status})`);
-    }
-
-    console.log("[VouchGrid] Handshake validated for:", verifyData.username);
-    verifiedPiUser = { username: verifyData.username };
-    isPiEngineReady = true;
-    localStorage.setItem('pi_user', verifyData.username);
-
-    if (authStatusText) authStatusText.innerText = `Connected: @${verifyData.username}`;
-    if (validatorInput) validatorInput.value = verifyData.username;
-    if (submitBtn) submitBtn.disabled = false;
-
-    const merchantId = document.getElementById('searchUsername')?.value.trim() || "";
-
-    // 3) NOW call the memory layer, using the same verified token
-    const res = await fetch("/api/verify-merchant", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${auth.accessToken}`,
-        },
-        body: JSON.stringify({ merchantId })
-    });
-    if (!res.ok) throw new Error(`Memory layer ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-
-    console.log("[VouchGrid] Memory layer payload retrieved:", data);
-    // ...use data...
-
-} catch (err) {
-    console.error("[VouchGrid] Handshake denied:", err);
-    // Visible on-screen debug (remove once fixed)
-    document.body.insertAdjacentHTML(
-        "beforeend",
-        `<pre style="position:fixed;bottom:0;left:0;right:0;background:#111;color:#0f0;padding:8px;font:12px monospace;white-space:pre-wrap;z-index:9999">${err.message}\n${err.stack || ""}</pre>`
-    );
-    isPiEngineReady = false;
-    if (authStatusText) authStatusText.innerText = "Authentication Failed";
-    if (authButton) authButton.style.display = "block";
-    if (validatorInput) validatorInput.value = "";
-}
-}    
-
+} // Closes the parent authenticate function securely
 
 
 
