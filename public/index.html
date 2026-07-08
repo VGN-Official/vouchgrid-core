@@ -315,12 +315,26 @@ async function authenticatePiUser() {
         
         
     
-        // 1) Authenticate with Pi FIRST
-        const auth = await authWithTimeout(["username", "payments"]);
+        // 1) Authenticate with Pi FIRST using your file's existing withTimeout wrapper
+        console.log("[Pi SDK] Initializing authentication wrapper sequence...");
+        
+        const authPromise = new Promise((resolve, reject) => {
+            window.Pi.authenticate(["username", "payments"], (paymentReceived) => {
+                if (typeof onIncompletePaymentFound === "function" && paymentReceived) {
+                    onIncompletePaymentFound(paymentReceived);
+                }
+            })
+            .then(auth => resolve(auth))
+            .catch(err => reject(err));
+        });
+
+        // This uses the exact withTimeout helper function found on line 18 of your file
+        const auth = await withTimeout(authPromise, 15000, "Pi Authentication");
+
         if (!auth || !auth.accessToken) {
             throw new Error("Pi.authenticate returned no accessToken");
         }
-
+        
         console.log("[VouchGrid] Token received. Validating with backend...");
 
         // 2) Validate the token with your backend
