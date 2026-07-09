@@ -234,6 +234,36 @@ let isInitialized = false;
 let isPiEngineReady = false; 
 let verifiedPiUser = localStorage.getItem('pi_user') || null;
 
+// FORCE GLOBAL SCOPE AT THE TOP OF YOUR FILE
+window.authWithTimeout = function(scopes, timeoutMs = 15000) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error("Authentication handshake timed out after " + (timeoutMs / 1000) + "s. Please retry."));
+        }, timeoutMs);
+
+        console.log("[Pi SDK] Invoking native authenticate for scopes:", scopes);
+        
+        if (!window.Pi) {
+            clearTimeout(timer);
+            return reject(new Error("Pi SDK is not loaded on the window object."));
+        }
+        
+        window.Pi.authenticate(scopes, (paymentReceived) => {
+            if (typeof onIncompletePaymentFound === "function" && paymentReceived) {
+                onIncompletePaymentFound(paymentReceived);
+            }
+        })
+        .then((auth) => {
+            clearTimeout(timer);
+            resolve(auth);
+        })
+        .catch((err) => {
+            clearTimeout(timer);
+            reject(err);
+        });
+    });
+};
+
 // --- 2. LIFE-CYCLE BOOT ENGAGEMENT ---
 window.addEventListener('DOMContentLoaded', async () => {
     console.log("[VouchGrid Grid] DOM Loaded. Initializing Pi Core Handshake safely...");
@@ -242,6 +272,24 @@ window.addEventListener('DOMContentLoaded', async () => {
     const vouchForm = document.getElementById('vouchForm');
     if (vouchForm) {
         vouchForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await triggerPiPayment();
+        });
+    }
+
+    // Safely assign lookup function explicitly to the verification search button
+    const searchBtn = document.getElementById('searchBtn');
+    if (searchBtn) {
+        searchBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            await lookupMerchant();
+        });
+    }
+
+    // Assumes your purple button has this ID to cleanly separate actions
+    const testPaymentBtn = document.getElementById('testPaymentBtn'); 
+    if (testPaymentBtn) {
+        testPaymentBtn.addEventListener('click', async (e) => {
             e.preventDefault();
             await triggerPiPayment();
         });
@@ -300,7 +348,7 @@ async function initPiNetwork() {
     }
 }
 
-// --- 4. SECURE USER AUTHENTICATION NODES ---
+// --- 4. SEC USER AUTHENTICATION NODES ---
 async function authenticatePiUser() {
     const authStatusText = document.getElementById('authText');
     const authButton = document.getElementById('authBtn');
@@ -313,28 +361,12 @@ async function authenticatePiUser() {
     try {
         console.log("[VouchGrid Grid] Triggering Pi.authenticate with expanded username and payments scopes...");
         
-        
-    
-        // 1) Authenticate with Pi FIRST using your file's existing withTimeout wrapper
-        console.log("[Pi SDK] Initializing authentication wrapper sequence...");
-        
-        const authPromise = new Promise((resolve, reject) => {
-            window.Pi.authenticate(["username", "payments"], (paymentReceived) => {
-                if (typeof onIncompletePaymentFound === "function" && paymentReceived) {
-                    onIncompletePaymentFound(paymentReceived);
-                }
-            })
-            .then(auth => resolve(auth))
-            .catch(err => reject(err));
-        });
-
-        // This uses the exact withTimeout helper function found on line 18 of your file
-        const auth = await withTimeout(authPromise, 15000, "Pi Authentication");
-
+        // 1) Authenticate with Pi FIRST using your global window fix
+        const auth = await window.authWithTimeout(["username", "payments"]);
         if (!auth || !auth.accessToken) {
             throw new Error("Pi.authenticate returned no accessToken");
         }
-        
+
         console.log("[VouchGrid] Token received. Validating with backend...");
 
         // 2) Validate the token with your backend
@@ -350,6 +382,9 @@ async function authenticatePiUser() {
         }
 
         console.log("[VouchGrid] Handshake validated for:", verifyData.username);
+        
+        // Save auth state globally for any secondary memory layer queries
+        window.currentAuthToken = auth.accessToken;
         verifiedPiUser = { username: verifyData.username };
         isPiEngineReady = true;
         localStorage.setItem('pi_user', verifyData.username);
@@ -358,29 +393,9 @@ async function authenticatePiUser() {
         if (validatorInput) validatorInput.value = verifyData.username;
         if (submitBtn) submitBtn.disabled = false;
 
-        const merchantId = document.getElementById('searchUsername')?.value.trim() || "";
-
-        // 3) Only query memory layer if there is an active search query present
-        if (merchantId) {
-            const res = await fetch("/api/verify-merchant", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${auth.accessToken}`,
-                },
-                body: JSON.stringify({ merchantId })
-            });
-            if (!res.ok) throw new Error(`Memory layer ${res.status}: ${await res.text()}`);
-            const data = await res.json();
-            console.log("[VouchGrid] Memory layer payload retrieved:", data);
-            // ...use data...
-        } else {
-            console.log("[VouchGrid] Clear authentication complete. Standing by for user lookup actions.");
-        }
-
     } catch (err) {
         console.error("[VouchGrid] Handshake denied:", err);
-        // Visible on-screen debug (remove once fixed)
+        // Visible on-screen debug
         document.body.insertAdjacentHTML(
             "beforeend",
             `<pre style="position:fixed;bottom:0;left:0;right:0;background:#111;color:#0f0;padding:8px;font:12px monospace;white-space:pre-wrap;z-index:9999">${err.message}\n${err.stack || ""}</pre>`
@@ -390,30 +405,22 @@ async function authenticatePiUser() {
         if (authButton) authButton.style.display = "block";
         if (validatorInput) validatorInput.value = "";
     }
-} // Closes the parent authenticate function securely
-
-
+}
 
 // --- 5. COMPREHENSIVE U2A PAYMENT TRANSFERS ---
-// This event listener attaches the payment logic explicitly to your purple button
-window.addEventListener('DOMContentLoaded', () => {
-    const testPaymentBtn = document.getElementById('testPaymentBtn'); // Assumes your purple button has this ID
-    if (testPaymentBtn) {
-        testPaymentBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            await triggerPiPayment();
-        });
-    }
-});
-
 async function triggerPiPayment() {
     const submitBtn = document.getElementById('submitBtn');
     const responseBox = document.getElementById('vouchResponse');
-    const targetUsername = document.getElementById('targetUsername').value.trim();
-    const validatorUsername = document.getElementById('validatorUsername').value.trim();
+    const targetUsername = document.getElementById('targetUsername')?.value.trim() || "";
+    const validatorUsername = document.getElementById('validatorUsername')?.value.trim() || "";
 
     if (!isPiEngineReady) {
         alert("Pi Engine is not ready. Please authenticate first.");
+        return;
+    }
+
+    if (!targetUsername) {
+        alert("Please provide a target merchant username.");
         return;
     }
 
@@ -469,9 +476,8 @@ async function triggerPiPayment() {
                         responseBox.className = "response-box success";
                         responseBox.innerText = `Payment Complete & Attestation Approved!\nTxID: ${txid}`;
                     }
-
                     if (submitBtn) {
-                            submitBtn.innerText = "Attestation Approved! ✓";
+                         submitBtn.innerText = "Attestation Approved! ✓";
                     }
                 } else {
                     throw new Error(finalData.error || "Failed to complete transaction database records.");
@@ -533,7 +539,8 @@ async function onIncompletePaymentFound(payment) {
 
 // --- 6. DATA REGISTRY QUERY ARCHITECTURE ---
 async function lookupMerchant() {
-    const username = document.getElementById('searchUsername').value.trim();
+    const usernameInput = document.getElementById('searchUsername');
+    const username = usernameInput ? usernameInput.value.trim() : "";
     const searchBtn = document.getElementById('searchBtn');
     const responseBox = document.getElementById('searchResponse');
 
@@ -581,9 +588,7 @@ async function lookupMerchant() {
             }
         }
     } catch (err) {
-
-        console.error("[VouchGrid Lookup Error]:", err); // Prints the exact error to console log for debugging
-
+        console.error("[VouchGrid Lookup Error]:", err);
         if (responseBox) {
             responseBox.style.display = "block";
             responseBox.className = "response-box error";
