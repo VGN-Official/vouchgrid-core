@@ -251,7 +251,7 @@ window.authWithTimeout = function(scopes, timeoutMs = 15000) {
         if (!isInitialized) {
             try {
                 console.log("[Pi SDK] Handshake caught uninitialized state. Executing structural init...");
-                await window.Pi.init({ version: "2.0", sandbox: true }); // Change to false if on Mainnet
+                await window.Pi.init({ version: "2.0", sandbox: false }); // Change to false if on Mainnet
                 isInitialized = true;
             } catch (initErr) {
                 console.log("[Pi SDK] Init catch bypass:", initErr.message);
