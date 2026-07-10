@@ -570,44 +570,56 @@ async function lookupMerchant() {
     if (responseBox) responseBox.style.display = "none";
 
     try {
+      try {
         const response = await fetch('/api/lookup-merchant', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ targetUsername: username, validatorUsername: "PUBLIC_LOOKUP_QUERY" })
+            body: JSON.stringify({ 
+                targetUsername: username, 
+                validatorUsername: "PUBLIC_LOOKUP_QUERY" 
+            })
         });
 
-        const data = await response.json();
         if (responseBox) responseBox.style.display = "block";
 
-        if (response.ok || data.user) {
-            if (responseBox) {
-                responseBox.className = "response-box success";
-                const profile = data.user || data;
-                
-                let badgeClass = profile.currentStatus === 'VERIFIED' || profile.kycStatus === 'VERIFIED' ? 'badge-verified' : 'badge-pending';
-                let statusText = profile.currentStatus || profile.kycStatus || "PENDING";
-                let count = profile.vouchesCount !== undefined ? profile.vouchesCount : (profile.vouchesReceived ? profile.vouchesReceived.length : 0);
-                let reqCount = profile.requiredVouches || 3;
-
-                responseBox.innerHTML = `
-                    <strong>Merchant ID:</strong> @${username}<br>
-                    <strong>Network Status:</strong> <span class="profile-badge ${badgeClass}">${statusText}</span><br>
-                    <strong>Consensus Weight:</strong> ${count}/${reqCount} Attestations Verified
-                `;
-            }
-        } else {
-            if (responseBox) {
-                responseBox.className = "response-box error";
-                responseBox.innerText = `System Notice: ${data.error || "No active record found."}`;
-            }
+        // --- SYNCHRONIZED DEBUG ENGINE ---
+        // Pull raw text first to inspect non-JSON structural failures
+        const textResponse = await response.text();
+        let data;
+        try {
+            data = textResponse ? JSON.parse(textResponse) : null;
+        } catch (jsonErr) {
+            throw new Error(`Server returned non-JSON data (HTTP ${response.status}): ${textResponse.slice(0, 120)}`);
         }
+
+        if (!response.ok || !data || data.success === false) {
+            throw new Error(data?.error || `Lookup failed with HTTP Status code ${response.status}`);
+        }
+        // ----------------------------------
+
+        responseBox.className = "response-box success";
+        const profile = data.user || data;
+        
+        let badgeClass = profile.currentStatus === 'VERIFIED' || profile.kycStatus === 'VERIFIED' ? 'badge-verified' : 'badge-pending';
+        let statusText = profile.currentStatus || profile.kycStatus || "PENDING";
+        let count = profile.vouchesCount !== undefined ? profile.vouchesCount : (profile.vouchesReceived ? profile.vouchesReceived.length : 0);
+        let reqCount = profile.requiredVouches || 3;
+
+        responseBox.innerHTML = `
+            <strong>Merchant ID:</strong> @${username}<br>
+            <strong>Network Status:</strong> <span class="profile-badge ${badgeClass}">${statusText}</span><br>
+            <strong>Consensus Weight:</strong> ${count}/${reqCount} Attestations Verified
+        `;
+
     } catch (err) {
         console.error("[VouchGrid Lookup Error]:", err);
         if (responseBox) {
             responseBox.style.display = "block";
             responseBox.className = "response-box error";
-            responseBox.innerText = `Network Failure: Failed to pull data from memory layer.`;
+            // Surface the clear runtime text error directly to the UI panel
+            responseBox.innerText = `System Notice: ${err.message}`;
         }
+    }
     } finally {
         if (searchBtn) {
             searchBtn.disabled = false;
