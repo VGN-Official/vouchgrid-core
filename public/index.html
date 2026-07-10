@@ -571,7 +571,7 @@ async function lookupMerchant() {
 
     try {
       try {
-        const response = await fetch('/api/lookup-merchant', {
+       const response = await fetch('https://vouchgrid-core.vercel.app/api/lookup-merchant', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
