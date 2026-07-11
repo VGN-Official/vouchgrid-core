@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { redis } from '../_db.js'; // <-- Change this to .js
+import { redis } from '../../src/_db'; // <-- Change this to .js
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { username } = req.query;
