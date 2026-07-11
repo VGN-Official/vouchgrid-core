@@ -1,42 +1,16 @@
 import { Redis } from '@upstash/redis';
 
-// Hardened check to ensure the serverless engine has connection variables configured
-if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-  console.warn(
-    "[VouchGrid DB Warning]: Missing Redis Environment variables. " +
-    "Ensure KV_REST_API_URL and KV_REST_API_TOKEN are set in your Vercel Dashboard."
-  );
-}
+// Tell TypeScript that process is a global object containing env
+declare const process: { env: { [key: string]: string | undefined } };
 
-// Instantiate the single global connection manager for your serverless tasks
-export const redis = new Redis({
-  url: process.env.KV_REST_API_URL || '',
-  token: process.env.KV_REST_API_TOKEN || '',
-});
+const url: string = process.env.KV_REST_API_URL || '';
+const token: string = process.env.KV_REST_API_TOKEN || '';
 
-/**
- * Global utility helpers for handling the VouchGrid Merchant Registry
- */
-export const db = {
-  /**
-   * Fetches a clean merchant profile record from the ledger
-   */
-  async getMerchant(username: string) {
-    const key = `merchant:${username.toLowerCase().trim()}`;
-    return await redis.get<{
-      username: string;
-      currentStatus: string;
-      vouchesCount: number;
-      requiredVouches: number;
-    }>(key);
-  },
-
-  /**
-   * Saves or updates a merchant profile record in the ledger
-   */
-  async setMerchant(username: string, data: any) {
-    const key = `merchant:${username.toLowerCase().trim()}`;
-    return await redis.set(key, data);
-  }
-};
-
+export const redis = url && token 
+  ? new Redis({ url, token }) 
+  : ({
+      get: async (key: string) => { 
+        console.error("Redis URL/Token missing in environment variables.", key); 
+        return null; 
+      }
+    } as unknown as Redis);
