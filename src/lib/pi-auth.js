@@ -21,11 +21,12 @@ export async function authWithTimeout(ms = 15000) {
 // 2. The data loading function from file #2 (merged here natively)
 export async function loadData() {
   const auth = await authWithTimeout(); 
-  const res = await fetch("/api/data", {
+  const res = await fetch("/api/pi-auth", { // 👈 Fixed path: points directly to your backend endpoint
+    method: "POST",                          // 👈 Fixed method: matches your backend POST handler
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${auth.accessToken}`,
-    },
+  },
+    body: JSON.stringify({ accessToken: auth.accessToken }), // 👈 Sends token right in the body payload
   });
   
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
