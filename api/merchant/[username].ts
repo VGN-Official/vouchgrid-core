@@ -9,8 +9,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const data = await redis.get(`user:${(username as string).toLowerCase()}`);
     if (!data) return res.status(404).json({ error: "No behavioral attestation file exists for this identity." });
     
-    return res.status(200).json(typeof data === 'string' ? JSON.parse(data) : data);
+    // Safely parse if it's a string, otherwise return the object directly
+    const responseData = typeof data === 'string' ? JSON.parse(data) : data;
+    return res.status(200).json(responseData);
+    
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
-}
+} 
