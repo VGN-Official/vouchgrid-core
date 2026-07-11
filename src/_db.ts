@@ -3,8 +3,8 @@ import { Redis } from '@upstash/redis';
 // Tell TypeScript that process is a global object containing env
 declare const process: { env: { [key: string]: string | undefined } };
 
-const url: string = process.env.KV_REST_API_URL || '';
-const token: string = process.env.KV_REST_API_TOKEN || '';
+const url: string = process.env.UPSTASH_REDIS_REST_URL || '';
+const token: string = process.env.UPSTASH_REDIS_REST_TOKEN || '';
 
 export const redis = url && token 
   ? new Redis({ url, token }) 
